@@ -63,7 +63,8 @@ MINOR_COLOR = '#2a3038'
 # ── 비밀번호 체크 ──────────────────────────────────────────────
 def check_password():
     def password_entered():
-        if st.session_state["password"] == st.secrets["password"]:
+        correct = st.secrets.get("password", None)
+        if correct and st.session_state["password"] == correct:
             st.session_state["password_correct"] = True
             del st.session_state["password"]
         else:
