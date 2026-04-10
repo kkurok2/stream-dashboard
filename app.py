@@ -67,7 +67,7 @@ def check_password():
         try:
             correct = st.secrets["password"]
         except:
-            correct = "1234"
+            correct = "kyoboh02"
         if st.session_state["password"] == correct:
             st.session_state["password_correct"] = True
             del st.session_state["password"]
