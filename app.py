@@ -60,6 +60,50 @@ JSON_PATH   = "stream-dashboard-492904-e1298f3e3f92.json"
 GRID_COLOR  = '#3d444d'
 MINOR_COLOR = '#2a3038'
 
+# ── 비밀번호 체크 ──────────────────────────────────────────────
+def check_password():
+    def password_entered():
+        if st.session_state["password"] == st.secrets["password"]:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            st.markdown("""
+            <div style='text-align:center; margin-bottom:20px;'>
+                <div style='font-size:32px;'>📊</div>
+                <div style='color:#e6edf3; font-size:18px; font-weight:700; margin:8px 0;'>채권운용 Daily 주요 지표</div>
+                <div style='color:#8b949e; font-size:13px;'>접근 권한이 필요합니다</div>
+            </div>
+            """, unsafe_allow_html=True)
+            st.text_input("🔑 비밀번호", type="password",
+                          on_change=password_entered, key="password",
+                          placeholder="비밀번호를 입력하세요")
+        return False
+    elif not st.session_state["password_correct"]:
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            st.markdown("""
+            <div style='text-align:center; margin-bottom:20px;'>
+                <div style='font-size:32px;'>📊</div>
+                <div style='color:#e6edf3; font-size:18px; font-weight:700; margin:8px 0;'>채권운용 Daily 주요 지표</div>
+                <div style='color:#8b949e; font-size:13px;'>접근 권한이 필요합니다</div>
+            </div>
+            """, unsafe_allow_html=True)
+            st.text_input("🔑 비밀번호", type="password",
+                          on_change=password_entered, key="password",
+                          placeholder="비밀번호를 입력하세요")
+            st.error("❌ 비밀번호가 틀렸습니다. 다시 시도해주세요.")
+        return False
+    return True
+
+if not check_password():
+    st.stop()
+
 SCOPES = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive"
