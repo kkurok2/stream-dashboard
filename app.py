@@ -5,6 +5,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 st.set_page_config(
     page_title="채권운용 Daily 주요 지표",
@@ -278,7 +279,7 @@ def make_line_chart(df, x_col, y_cols, title, colors=None, height=420):
 
 # ── 헤더 ──────────────────────────────────────────────────────
 data = load_all_data()
-today_str = datetime.now().strftime("%Y년 %m월 %d일")
+today_str = datetime.now(ZoneInfo("Asia/Seoul")).strftime("%Y년 %m월 %d일")
 
 header_col, btn_col = st.columns([5, 1])
 with header_col:
