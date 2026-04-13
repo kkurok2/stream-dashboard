@@ -331,8 +331,8 @@ if not spread.empty:
 
     col1, col2 = st.columns([2, 1])
     with col1:
-        fig = make_line_chart(spread.tail(120), '일자', ['3Y','5Y','10Y','20Y','30Y'],
-                              '국고채 금리 추이 (최근 120일)')
+        fig = make_line_chart(spread, '일자', ['3Y','5Y','10Y','20Y','30Y'],
+                              '국고채 금리 추이')
         st.plotly_chart(fig, use_container_width=True)
     with col2:
         # 수익률 곡선: 현재 / 한달 전(edate-1) / 1년 전(edate-12)
@@ -384,42 +384,42 @@ if not spread.empty:
             </div>""", unsafe_allow_html=True)
 
     with chart_col:
-        # 5개 개별 차트
-        sub = spread.tail(120).copy()
+        # 5개 개별 차트 — 각각 독립적으로 zoom/scale 가능
+        sub = spread.copy()
         sub_bp = sub.copy()
         for c in sp_cols:
             sub_bp[c] = sub_bp[c] * 100
 
-        rows_n, cols_n = 3, 2
-        fig_sp = make_subplots(
-            rows=3, cols=2,
-            subplot_titles=[f'Spread {c} (bp)' for c in sp_cols] + [''],
-            vertical_spacing=0.12, horizontal_spacing=0.08
-        )
-        positions = [(1,1),(1,2),(2,1),(2,2),(3,1)]
-        for i, (c, color, pos) in enumerate(zip(sp_cols, sp_colors, positions)):
-            fig_sp.add_trace(go.Scatter(
-                x=sub_bp['일자'], y=sub_bp[c], name=c,
-                line=dict(color=color, width=1.5), showlegend=True,
-                hovertemplate=f'<b>{c}</b>: %{{y:.1f}}bp<br>%{{x|%Y-%m-%d}}<extra></extra>'
-            ), row=pos[0], col=pos[1])
-
-        fig_sp.update_layout(
-            paper_bgcolor='#161b22', plot_bgcolor='#161b22',
-            font=dict(color='#D9DADD', family='Noto Sans KR', size=12),
-            height=560, margin=dict(l=10, r=10, t=40, b=10),
-            showlegend=False,
-            hovermode='x unified',
-        )
-        fig_sp.update_annotations(font=dict(color='#e6edf3', size=13))
-        for i in range(1, 7):
-            fig_sp.update_xaxes(gridcolor=GRID_COLOR, showgrid=True, zeroline=False,
-                                minor=dict(showgrid=True, gridcolor=MINOR_COLOR),
-                                tickfont=dict(color='#D9DADD'), row=(i-1)//2+1, col=(i-1)%2+1)
-            fig_sp.update_yaxes(gridcolor=GRID_COLOR, showgrid=True, zeroline=False,
-                                minor=dict(showgrid=True, gridcolor=MINOR_COLOR),
-                                tickfont=dict(color='#D9DADD'), row=(i-1)//2+1, col=(i-1)%2+1)
-        st.plotly_chart(fig_sp, use_container_width=True)
+        # 2열 그리드로 배치
+        chart_grid_rows = [
+            st.columns(2),
+            st.columns(2),
+            st.columns(2),
+        ]
+        positions_grid = [(0,0),(0,1),(1,0),(1,1),(2,0)]
+        for i, (c, color, pos) in enumerate(zip(sp_cols, sp_colors, positions_grid)):
+            row_idx, col_idx = pos
+            with chart_grid_rows[row_idx][col_idx]:
+                fig_sp = go.Figure()
+                fig_sp.add_trace(go.Scatter(
+                    x=sub_bp['일자'], y=sub_bp[c], name=c,
+                    line=dict(color=color, width=1.5), showlegend=False,
+                    hovertemplate=f'<b>{c}</b>: %{{y:.1f}}bp<br>%{{x|%Y-%m-%d}}<extra></extra>'
+                ))
+                fig_sp.update_layout(
+                    title=dict(text=f'Spread {c} (bp)', font=dict(color='#e6edf3', size=13, family='Noto Sans KR'), x=0),
+                    paper_bgcolor='#161b22', plot_bgcolor='#161b22',
+                    font=dict(color='#D9DADD', family='Noto Sans KR', size=11),
+                    height=260, margin=dict(l=10, r=10, t=36, b=10),
+                    hovermode='x unified',
+                    xaxis=dict(gridcolor=GRID_COLOR, showgrid=True, zeroline=False,
+                               minor=dict(showgrid=True, gridcolor=MINOR_COLOR),
+                               tickfont=dict(color='#D9DADD', size=10)),
+                    yaxis=dict(gridcolor=GRID_COLOR, showgrid=True, zeroline=False,
+                               minor=dict(showgrid=True, gridcolor=MINOR_COLOR),
+                               tickfont=dict(color='#D9DADD', size=10)),
+                )
+                st.plotly_chart(fig_sp, use_container_width=True)
 
 # ══════════════════════════════════════════════════════════════
 # 3. IRS — 카드 1x4 왼쪽, 차트 오른쪽
@@ -441,8 +441,8 @@ if not irs.empty:
                 {delta_html(chg)}
             </div>""", unsafe_allow_html=True)
     with chart_col2:
-        fig = make_line_chart(irs.tail(120), '일자', ['1Y','3Y','5Y','10Y'],
-                              'IRS 금리 추이 (최근 120일)', height=420)
+        fig = make_line_chart(irs, '일자', ['1Y','3Y','5Y','10Y'],
+                              'IRS 금리 추이', height=420)
         st.plotly_chart(fig, use_container_width=True)
 
 # ══════════════════════════════════════════════════════════════
@@ -485,7 +485,7 @@ if swap_ts.empty:
 if not swap_ts.empty:
     latest_sw = swap_ts.iloc[-1]
     prev_sw   = swap_ts.iloc[-2] if len(swap_ts) > 1 else latest_sw
-    sub_sw    = swap_ts.tail(120)
+    sub_sw    = swap_ts
 
     # 그룹 정의: (섹션명, [(표시명, 컬럼 prefix)])
     GROUPS = [
