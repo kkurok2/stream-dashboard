@@ -211,25 +211,35 @@ def parse_futures(df):
         return pd.DataFrame()
 
 def parse_swap_ts(df):
-    """Swap Time Series: 날짜 + 각 종목/만기별 컬럼으로 파싱"""
+    """Swap Time Series: 날짜 + 각 종목/만기별 컬럼으로 파싱
+    tenor가 유효한 컬럼만 선택해 빈 열(카드채AAA 삭제 등)로 인한 중복·오류 방지"""
     try:
         cats_raw   = df.iloc[0, 1:].tolist()
         tenors_raw = df.iloc[1, 1:].tolist()
-        # 카테고리 ffill — Google Sheets는 빈 셀이 '' 로 옴
+        # 카테고리 ffill
         cats = []
         cur = None
         for c in cats_raw:
             if c is not None and str(c).strip() not in ['', 'nan', 'None']:
                 cur = str(c).strip()
             cats.append(cur)
-        # tenors도 빈 문자열 처리
-        tenors_clean = [str(t).strip() if str(t).strip() not in ['', 'nan', 'None'] else 'X' for t in tenors_raw]
-        col_names = ['일자'] + [f'{c}_{t}' for c, t in zip(cats, tenors_clean)]
+        # tenor가 유효한 컬럼만 선택 (빈 열 스킵, 중복 컬럼명 방지)
+        valid_indices = []
+        valid_col_names = []
+        seen = set()
+        for i, (c, t) in enumerate(zip(cats, tenors_raw)):
+            t_str = str(t).strip() if t is not None and str(t).strip() not in ['', 'nan', 'None'] else ''
+            if c and t_str:
+                col_key = f'{c}_{t_str}'
+                if col_key not in seen:
+                    seen.add(col_key)
+                    valid_indices.append(i + 1)  # df col index (0열=일자)
+                    valid_col_names.append(col_key)
         rows = df.iloc[2:].copy()
-        rows = rows.iloc[:, :len(col_names)]
-        rows.columns = col_names
+        rows = rows.iloc[:, [0] + valid_indices]
+        rows.columns = ['일자'] + valid_col_names
         rows['일자'] = pd.to_datetime(rows['일자'], errors='coerce')
-        for c in col_names[1:]:
+        for c in valid_col_names:
             rows[c] = pd.to_numeric(rows[c], errors='coerce')
         result = rows.dropna(subset=['일자']).sort_values('일자')
         return result
