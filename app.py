@@ -27,7 +27,7 @@ st.markdown("""
     .metric-label { color: #D9DADD; font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
     .metric-value { color: #e6edf3; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
     .metric-delta-pos { color: #f85149; font-size: 15px; font-weight: 600; }
-    .metric-delta-neg { color: #3fb950; font-size: 15px; font-weight: 600; }
+    .metric-delta-neg { color: #3b82f6; font-size: 15px; font-weight: 600; }
     .metric-delta-zero { color: #8b949e; font-size: 15px; font-weight: 600; }
     .section-header {
         color: #e6edf3; font-size: 18px; font-weight: 700; letter-spacing: 0.04em;
@@ -52,7 +52,13 @@ st.markdown("""
     .bond-table tr:nth-child(odd) td { background: #0d1117; }
     .bond-table td:first-child { color: #D9DADD; font-weight: 500; text-align: left; }
     .td-pos { color: #f85149 !important; }
-    .td-neg { color: #3fb950 !important; }
+    .td-neg { color: #3b82f6 !important; }
+    .mtd-ytd-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+    .mtd-ytd-table th { background: #1f2937; color: #8b949e; padding: 5px 8px; text-align: center; border: 1px solid #30363d; font-weight: 600; font-size: 11px; letter-spacing: 0.05em; }
+    .mtd-ytd-table td { color: #c9d1d9; padding: 5px 8px; text-align: center; border: 1px solid #21262d; font-size: 12px; }
+    .mtd-ytd-table td:first-child { color: #8b949e; font-weight: 600; background: #161b22; }
+    .mtd-ytd-table .td-pos { color: #f85149 !important; }
+    .mtd-ytd-table .td-neg { color: #3b82f6 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -64,7 +70,6 @@ MINOR_COLOR = '#2a3038'
 # ── 비밀번호 체크 ──────────────────────────────────────────────
 def check_password():
     def password_entered():
-        # Secrets 또는 하드코딩 둘 다 시도
         try:
             correct = st.secrets["password"]
         except:
@@ -116,14 +121,11 @@ SCOPES = [
 ]
 
 def get_credentials():
-    """로컬은 JSON 파일, Streamlit Cloud는 Secrets 사용"""
     try:
-        # Streamlit Cloud Secrets 시도
         import json
         secret_dict = dict(st.secrets["gcp_service_account"])
         creds = Credentials.from_service_account_info(secret_dict, scopes=SCOPES)
     except:
-        # 로컬 JSON 파일 사용
         creds = Credentials.from_service_account_file(JSON_PATH, scopes=SCOPES)
     return creds
 
@@ -168,35 +170,98 @@ def base_layout(title, height=420):
 
 # ── 파싱 함수들 ────────────────────────────────────────────────
 def parse_spread(df):
+    """
+    cols: 0=일자, 1~7=국고채(1Y~30Y)
+          10=sp일자, 11~15=스프레드(2/3~20/30)
+          30=5MA날짜, 31~35=5MA(2/3~20/30)
+          37~41=20MA(2/3~20/30)
+    """
     try:
         rows = df.iloc[2:].copy()
-        rows = rows[[0,1,2,3,4,5,6,7,10,11,12,13,14,15]].copy()
-        rows.columns = ['일자','1Y','2Y','3Y','5Y','10Y','20Y','30Y','sp일자','2/3','3/10','5/30','10/30','20/30']
+        rows = rows[[0,1,2,3,4,5,6,7,
+                     10,11,12,13,14,15,
+                     30,31,32,33,34,35,
+                     37,38,39,40,41]].copy()
+        rows.columns = [
+            '일자','1Y','2Y','3Y','5Y','10Y','20Y','30Y',
+            'sp일자','2/3','3/10','5/30','10/30','20/30',
+            'ma5_일자','5MA_2/3','5MA_3/10','5MA_5/30','5MA_10/30','5MA_20/30',
+            '20MA_2/3','20MA_3/10','20MA_5/30','20MA_10/30','20MA_20/30',
+        ]
         rows['일자'] = pd.to_datetime(rows['일자'], errors='coerce')
-        for c in ['1Y','2Y','3Y','5Y','10Y','20Y','30Y','2/3','3/10','5/30','10/30','20/30']:
+        rows['ma5_일자'] = pd.to_datetime(rows['ma5_일자'], errors='coerce')
+        num_cols = [
+            '1Y','2Y','3Y','5Y','10Y','20Y','30Y',
+            '2/3','3/10','5/30','10/30','20/30',
+            '5MA_2/3','5MA_3/10','5MA_5/30','5MA_10/30','5MA_20/30',
+            '20MA_2/3','20MA_3/10','20MA_5/30','20MA_10/30','20MA_20/30',
+        ]
+        for c in num_cols:
             rows[c] = pd.to_numeric(rows[c], errors='coerce')
         return rows.dropna(subset=['일자']).sort_values('일자')
     except:
         return pd.DataFrame()
 
+def parse_spread_mtdytd(df):
+    """SPREAD 시트 MTD/YTD: row5=MTD, row6=YTD, cols 21~25 (2/3~20/30, bp 단위)"""
+    try:
+        sp_cols = ['2/3','3/10','5/30','10/30','20/30']
+        result = {}
+        for label, row_i in [('MTD', 5), ('YTD', 6)]:
+            row = df.iloc[row_i, :]
+            vals = [pd.to_numeric(row.iloc[j], errors='coerce') for j in range(21, 26)]
+            result[label] = dict(zip(sp_cols, vals))
+        return result
+    except:
+        return {}
+
 def parse_irs(df):
+    """
+    cols: 0=일자, 1=1Y, 2=1.5Y, 3=2Y, 4=3Y
+          7=5MA날짜, 8~11=5MA(1Y~3Y)
+          14~17=20MA(1Y~3Y)
+    """
     try:
         rows = df.iloc[2:].copy()
-        rows = rows[[0,1,2,3,4]].copy()
-        rows.columns = ['일자','1Y','3Y','5Y','10Y']
+        rows = rows[[0,1,2,3,4,
+                     7,8,9,10,11,
+                     14,15,16,17]].copy()
+        rows.columns = [
+            '일자','1Y','1.5Y','2Y','3Y',
+            'ma5_일자','5MA_1Y','5MA_1.5Y','5MA_2Y','5MA_3Y',
+            '20MA_1Y','20MA_1.5Y','20MA_2Y','20MA_3Y',
+        ]
         rows['일자'] = pd.to_datetime(rows['일자'], errors='coerce')
-        for c in ['1Y','3Y','5Y','10Y']:
+        rows['ma5_일자'] = pd.to_datetime(rows['ma5_일자'], errors='coerce')
+        num_cols = [
+            '1Y','1.5Y','2Y','3Y',
+            '5MA_1Y','5MA_1.5Y','5MA_2Y','5MA_3Y',
+            '20MA_1Y','20MA_1.5Y','20MA_2Y','20MA_3Y',
+        ]
+        for c in num_cols:
             rows[c] = pd.to_numeric(rows[c], errors='coerce')
         return rows.dropna(subset=['일자']).sort_values('일자')
     except:
         return pd.DataFrame()
+
+def parse_irs_mtdytd(df):
+    """IRS 시트 MTD/YTD: row3=MTD, row4=YTD, cols 22~25 (1Y~3Y, %p 단위)"""
+    try:
+        irs_cols = ['1Y','1.5Y','2Y','3Y']
+        result = {}
+        for label, row_i in [('MTD', 3), ('YTD', 4)]:
+            row = df.iloc[row_i, :]
+            vals = [pd.to_numeric(row.iloc[j], errors='coerce') for j in range(22, 26)]
+            result[label] = dict(zip(irs_cols, vals))
+        return result
+    except:
+        return {}
 
 def parse_futures(df):
     try:
         rows = df.iloc[2:].copy()
         rows = rows[[5,6,7,8,9,10,11]].copy()
         rows.columns = ['일자','3Y외국인','3Y증권선물','3Y은행','10Y외국인','10Y증권선물','10Y은행']
-        # Google Sheets에서 오면 날짜가 문자열, 엑셀에서 오면 숫자(serial)
         def parse_date(val):
             try:
                 num = float(val)
@@ -211,19 +276,16 @@ def parse_futures(df):
         return pd.DataFrame()
 
 def parse_swap_ts(df):
-    """Swap Time Series: 날짜 + 각 종목/만기별 컬럼으로 파싱
-    tenor가 유효한 컬럼만 선택해 빈 열(카드채AAA 삭제 등)로 인한 중복·오류 방지"""
+    """Swap Time Series: tenor가 유효한 컬럼만 선택해 빈 열 오류 방지"""
     try:
         cats_raw   = df.iloc[0, 1:].tolist()
         tenors_raw = df.iloc[1, 1:].tolist()
-        # 카테고리 ffill
         cats = []
         cur = None
         for c in cats_raw:
             if c is not None and str(c).strip() not in ['', 'nan', 'None']:
                 cur = str(c).strip()
             cats.append(cur)
-        # tenor가 유효한 컬럼만 선택 (빈 열 스킵, 중복 컬럼명 방지)
         valid_indices = []
         valid_col_names = []
         seen = set()
@@ -233,7 +295,7 @@ def parse_swap_ts(df):
                 col_key = f'{c}_{t_str}'
                 if col_key not in seen:
                     seen.add(col_key)
-                    valid_indices.append(i + 1)  # df col index (0열=일자)
+                    valid_indices.append(i + 1)
                     valid_col_names.append(col_key)
         rows = df.iloc[2:].copy()
         rows = rows.iloc[:, [0] + valid_indices]
@@ -274,18 +336,25 @@ def delta_html(val, unit='bp'):
     except:
         return ''
 
-def make_line_chart(df, x_col, y_cols, title, colors=None, height=420):
-    default_colors = ['#58a6ff','#3fb950','#f0883e','#d2a8ff','#ffa198','#79c0ff','#ff7b72']
-    fig = go.Figure()
-    for i, col in enumerate(y_cols):
-        c = colors[i] if colors and i < len(colors) else default_colors[i % len(default_colors)]
-        fig.add_trace(go.Scatter(
-            x=df[x_col], y=df[col], name=col,
-            line=dict(color=c, width=1.5),
-            hovertemplate=f'<b>{col}</b>: %{{y:.4f}}<br>%{{x|%Y-%m-%d}}<extra></extra>'
-        ))
-    fig.update_layout(**base_layout(title, height))
-    return fig
+def mtd_ytd_table_html(data_dict, cols, unit='bp'):
+    """MTD/YTD 스냅샷 테이블 HTML"""
+    header = '<tr><th></th>' + ''.join(f'<th>{c}</th>' for c in cols) + '</tr>'
+    rows_html = ''
+    for label in ['MTD', 'YTD']:
+        if label not in data_dict:
+            continue
+        cells = f'<td>{label}</td>'
+        for c in cols:
+            v = data_dict[label].get(c, float('nan'))
+            try:
+                v_f = float(v)
+                cls  = 'td-pos' if v_f > 0 else 'td-neg' if v_f < 0 else ''
+                sign = '▲' if v_f > 0 else '▼' if v_f < 0 else '─'
+                cells += f'<td class="{cls}">{sign}{abs(v_f):.1f}{unit}</td>'
+            except:
+                cells += '<td>-</td>'
+        rows_html += f'<tr>{cells}</tr>'
+    return f'<table class="mtd-ytd-table"><thead>{header}</thead><tbody>{rows_html}</tbody></table>'
 
 # ── 헤더 ──────────────────────────────────────────────────────
 data = load_all_data()
@@ -313,11 +382,17 @@ if data is None:
     st.error("⚠️ Google Sheets 데이터를 불러올 수 없습니다. JSON 키 파일과 SHEET_ID를 확인하세요.")
     st.stop()
 
-spread   = parse_spread(data.get('SPREAD', pd.DataFrame()))
-irs      = parse_irs(data.get('IRS', pd.DataFrame()))
+spread_raw = data.get('SPREAD', pd.DataFrame())
+irs_raw    = data.get('IRS', pd.DataFrame())
+
+spread   = parse_spread(spread_raw)
+irs      = parse_irs(irs_raw)
 futures  = parse_futures(data.get('KTB Futures', pd.DataFrame()))
 swap_ts  = parse_swap_ts(data.get('Swap Time Series', pd.DataFrame()))
 static_tenors, bond_swap_static = parse_bond_swap_static(data.get('BOND SWAP', pd.DataFrame()))
+
+spread_mtdytd = parse_spread_mtdytd(spread_raw)
+irs_mtdytd    = parse_irs_mtdytd(irs_raw)
 
 # ══════════════════════════════════════════════════════════════
 # 1. 국고채 금리
@@ -341,44 +416,68 @@ if not spread.empty:
 
     col1, col2 = st.columns([2, 1])
     with col1:
-        fig = make_line_chart(spread, '일자', ['3Y','5Y','10Y','20Y','30Y'],
-                              '국고채 금리 추이')
+        fig = go.Figure()
+        ktb_colors = ['#58a6ff','#3fb950','#f0883e','#d2a8ff','#ffa198']
+        for i, t in enumerate(['3Y','5Y','10Y','20Y','30Y']):
+            fig.add_trace(go.Scatter(
+                x=spread['일자'], y=spread[t], name=t,
+                line=dict(color=ktb_colors[i], width=1.5),
+                hovertemplate=f'<b>{t}</b>: %{{y:.3f}}%<br>%{{x|%Y-%m-%d}}<extra></extra>'
+            ))
+        fig.update_layout(**base_layout('국고채 금리 추이'))
         st.plotly_chart(fig, use_container_width=True)
+
     with col2:
-        # 수익률 곡선: 현재 / 한달 전(edate-1) / 1년 전(edate-12)
+        # ── 수익률 곡선: 날짜 3개 선택 비교 ──
+        st.markdown('<div style="color:#8b949e;font-size:12px;font-weight:600;margin-bottom:6px;letter-spacing:0.04em;">📅 비교 날짜 선택 (최대 3개)</div>', unsafe_allow_html=True)
+        available_dates = spread['일자'].dt.date.tolist()[::-1]
+
+        col_d1, col_d2, col_d3 = st.columns(3)
+        with col_d1:
+            d1 = st.selectbox('날짜1', available_dates, index=0, key='yc_d1',
+                              label_visibility='collapsed')
+        with col_d2:
+            default_1m = min(range(len(available_dates)),
+                key=lambda i: abs((pd.Timestamp(available_dates[i]) -
+                    (pd.Timestamp(available_dates[0]) - pd.DateOffset(months=1))).days))
+            d2 = st.selectbox('날짜2', available_dates, index=default_1m, key='yc_d2',
+                              label_visibility='collapsed')
+        with col_d3:
+            default_1y = min(range(len(available_dates)),
+                key=lambda i: abs((pd.Timestamp(available_dates[i]) -
+                    (pd.Timestamp(available_dates[0]) - pd.DateOffset(years=1))).days))
+            d3 = st.selectbox('날짜3', available_dates, index=default_1y, key='yc_d3',
+                              label_visibility='collapsed')
+
+        yc_colors = ['#58a6ff','#3fb950','#f0883e']
+        yc_dashes = ['solid','dash','dot']
+        yc_widths = [2, 1.5, 1.5]
+        x_axis    = ['2Y','3Y','5Y','10Y','20Y','30Y']
         fig2 = go.Figure()
-        x_axis = ['2Y','3Y','5Y','10Y','20Y','30Y']
-        ref_date = latest['일자']
-        one_month_ago = ref_date - pd.DateOffset(months=1)
-        one_year_ago  = ref_date - pd.DateOffset(years=1)
-        idx_1m = (spread['일자'] - one_month_ago).abs().idxmin()
-        idx_1y = (spread['일자'] - one_year_ago).abs().idxmin()
-        row_1m = spread.loc[idx_1m]
-        row_1y = spread.loc[idx_1y]
-
-        fig2.add_trace(go.Scatter(x=x_axis, y=[latest[t] for t in x_axis],
-            mode='lines+markers', line=dict(color='#58a6ff', width=2),
-            marker=dict(size=7), name='현재'))
-        fig2.add_trace(go.Scatter(x=x_axis, y=[row_1m[t] for t in x_axis],
-            mode='lines+markers', line=dict(color='#3fb950', width=1.5, dash='dash'),
-            marker=dict(size=5), name=f'한달전 ({row_1m["일자"].strftime("%y.%m")})'))
-        fig2.add_trace(go.Scatter(x=x_axis, y=[row_1y[t] for t in x_axis],
-            mode='lines+markers', line=dict(color='#f0883e', width=1.5, dash='dot'),
-            marker=dict(size=5), name=f'1년전 ({row_1y["일자"].strftime("%y.%m")})'))
-
-        fig2.update_layout(**base_layout('수익률 곡선', height=420))
+        for di, sel_date in enumerate([d1, d2, d3]):
+            sel_ts = pd.Timestamp(sel_date)
+            idx    = (spread['일자'] - sel_ts).abs().idxmin()
+            row    = spread.loc[idx]
+            fig2.add_trace(go.Scatter(
+                x=x_axis, y=[row[t] for t in x_axis],
+                mode='lines+markers',
+                line=dict(color=yc_colors[di], width=yc_widths[di], dash=yc_dashes[di]),
+                marker=dict(size=6 if di == 0 else 5),
+                name=row['일자'].strftime('%y.%m.%d')
+            ))
+        fig2.update_layout(**base_layout('수익률 곡선 비교', height=420))
         fig2.update_layout(xaxis=grid_axis())
         st.plotly_chart(fig2, use_container_width=True)
 
 # ══════════════════════════════════════════════════════════════
-# 2. 스프레드 분석 — 카드 1x5 왼쪽, 각 스프레드별 개별 차트 오른쪽
+# 2. 스프레드 분석
 # ══════════════════════════════════════════════════════════════
 st.markdown('<div class="section-header">📐 스프레드 분석</div>', unsafe_allow_html=True)
 
 if not spread.empty:
     latest_s = spread.iloc[-1]
     prev_s   = spread.iloc[-2] if len(spread) > 1 else latest_s
-    sp_cols  = ['2/3','3/10','5/30','10/30','20/30']
+    sp_cols   = ['2/3','3/10','5/30','10/30','20/30']
     sp_colors = ['#58a6ff','#3fb950','#f0883e','#d2a8ff','#ffa198']
 
     card_col, chart_col = st.columns([1, 3])
@@ -393,35 +492,51 @@ if not spread.empty:
                 {delta_html(chg)}
             </div>""", unsafe_allow_html=True)
 
-    with chart_col:
-        # 5개 개별 차트 — 각각 독립적으로 zoom/scale 가능
-        sub = spread.copy()
-        sub_bp = sub.copy()
-        for c in sp_cols:
-            sub_bp[c] = sub_bp[c] * 100
+        # MTD / YTD 테이블
+        if spread_mtdytd:
+            st.markdown('<div style="margin-top:14px;color:#8b949e;font-size:11px;font-weight:600;letter-spacing:0.06em;">MTD / YTD (bp)</div>', unsafe_allow_html=True)
+            st.markdown(mtd_ytd_table_html(spread_mtdytd, sp_cols, unit='bp'),
+                        unsafe_allow_html=True)
 
-        # 2열 그리드로 배치
-        chart_grid_rows = [
-            st.columns(2),
-            st.columns(2),
-            st.columns(2),
-        ]
-        positions_grid = [(0,0),(0,1),(1,0),(1,1),(2,0)]
+    with chart_col:
+        # 5개 개별 차트 — 각각 독립 zoom, 5MA·20MA 포함
+        sub_bp = spread.copy()
+        for c in sp_cols:
+            sub_bp[c]           = sub_bp[c]           * 100
+            sub_bp[f'5MA_{c}']  = sub_bp[f'5MA_{c}']  * 100
+            sub_bp[f'20MA_{c}'] = sub_bp[f'20MA_{c}'] * 100
+
+        chart_grid_rows = [st.columns(2), st.columns(2), st.columns(2)]
+        positions_grid  = [(0,0),(0,1),(1,0),(1,1),(2,0)]
         for i, (c, color, pos) in enumerate(zip(sp_cols, sp_colors, positions_grid)):
             row_idx, col_idx = pos
             with chart_grid_rows[row_idx][col_idx]:
                 fig_sp = go.Figure()
                 fig_sp.add_trace(go.Scatter(
                     x=sub_bp['일자'], y=sub_bp[c], name=c,
-                    line=dict(color=color, width=1.5), showlegend=False,
+                    line=dict(color=color, width=1.5), showlegend=True,
                     hovertemplate=f'<b>{c}</b>: %{{y:.1f}}bp<br>%{{x|%Y-%m-%d}}<extra></extra>'
                 ))
+                if f'5MA_{c}' in sub_bp.columns:
+                    fig_sp.add_trace(go.Scatter(
+                        x=sub_bp['일자'], y=sub_bp[f'5MA_{c}'], name='5MA',
+                        line=dict(color='#ffa198', width=0.9), showlegend=True,
+                        hovertemplate='<b>5MA</b>: %{y:.1f}bp<extra></extra>'
+                    ))
+                if f'20MA_{c}' in sub_bp.columns:
+                    fig_sp.add_trace(go.Scatter(
+                        x=sub_bp['일자'], y=sub_bp[f'20MA_{c}'], name='20MA',
+                        line=dict(color='#d2a8ff', width=0.9), showlegend=True,
+                        hovertemplate='<b>20MA</b>: %{y:.1f}bp<extra></extra>'
+                    ))
                 fig_sp.update_layout(
                     title=dict(text=f'Spread {c} (bp)', font=dict(color='#e6edf3', size=13, family='Noto Sans KR'), x=0),
                     paper_bgcolor='#161b22', plot_bgcolor='#161b22',
                     font=dict(color='#D9DADD', family='Noto Sans KR', size=11),
-                    height=260, margin=dict(l=10, r=10, t=36, b=10),
+                    height=290, margin=dict(l=10, r=10, t=36, b=10),
                     hovermode='x unified',
+                    legend=dict(orientation='h', yanchor='bottom', y=1.0, xanchor='left', x=0,
+                                font=dict(size=10, color='#D9DADD'), bgcolor='rgba(0,0,0,0)'),
                     xaxis=dict(gridcolor=GRID_COLOR, showgrid=True, zeroline=False,
                                minor=dict(showgrid=True, gridcolor=MINOR_COLOR),
                                tickfont=dict(color='#D9DADD', size=10)),
@@ -432,17 +547,19 @@ if not spread.empty:
                 st.plotly_chart(fig_sp, use_container_width=True)
 
 # ══════════════════════════════════════════════════════════════
-# 3. IRS — 카드 1x4 왼쪽, 차트 오른쪽
+# 3. IRS 금리 — 1Y·1.5Y·2Y·3Y, 4개 개별 차트 + 5MA/20MA
 # ══════════════════════════════════════════════════════════════
 st.markdown('<div class="section-header">🔄 IRS 금리</div>', unsafe_allow_html=True)
 
 if not irs.empty:
-    latest_i = irs.iloc[-1]
-    prev_i   = irs.iloc[-2] if len(irs) > 1 else latest_i
+    latest_i   = irs.iloc[-1]
+    prev_i     = irs.iloc[-2] if len(irs) > 1 else latest_i
+    irs_tenors = ['1Y','1.5Y','2Y','3Y']
+    irs_colors = ['#58a6ff','#3fb950','#f0883e','#d2a8ff']
 
-    card_col2, chart_col2 = st.columns([1, 2])
+    card_col2, chart_col2 = st.columns([1, 3])
     with card_col2:
-        for t in ['1Y','3Y','5Y','10Y']:
+        for t in irs_tenors:
             chg = (latest_i[t] - prev_i[t]) * 100
             st.markdown(f"""
             <div class="metric-card">
@@ -450,10 +567,56 @@ if not irs.empty:
                 <div class="metric-value">{latest_i[t]:.3f}%</div>
                 {delta_html(chg)}
             </div>""", unsafe_allow_html=True)
+
+        # MTD / YTD 테이블
+        if irs_mtdytd:
+            st.markdown('<div style="margin-top:14px;color:#8b949e;font-size:11px;font-weight:600;letter-spacing:0.06em;">MTD / YTD (bp)</div>', unsafe_allow_html=True)
+            st.markdown(mtd_ytd_table_html(irs_mtdytd, irs_tenors, unit='bp'),
+                        unsafe_allow_html=True)
+
     with chart_col2:
-        fig = make_line_chart(irs, '일자', ['1Y','3Y','5Y','10Y'],
-                              'IRS 금리 추이', height=420)
-        st.plotly_chart(fig, use_container_width=True)
+        # 4개 개별 차트 (2×2) — 각각 독립 zoom, 5MA·20MA 포함
+        irs_chart_rows = [st.columns(2), st.columns(2)]
+        irs_positions  = [(0,0),(0,1),(1,0),(1,1)]
+        for i, (t, color, pos) in enumerate(zip(irs_tenors, irs_colors, irs_positions)):
+            row_idx, col_idx = pos
+            with irs_chart_rows[row_idx][col_idx]:
+                fig_irs = go.Figure()
+                fig_irs.add_trace(go.Scatter(
+                    x=irs['일자'], y=irs[t], name=f'IRS {t}',
+                    line=dict(color=color, width=1.5), showlegend=True,
+                    hovertemplate=f'<b>IRS {t}</b>: %{{y:.3f}}%<br>%{{x|%Y-%m-%d}}<extra></extra>'
+                ))
+                ma5_col  = f'5MA_{t}'
+                ma20_col = f'20MA_{t}'
+                if ma5_col in irs.columns:
+                    fig_irs.add_trace(go.Scatter(
+                        x=irs['일자'], y=irs[ma5_col], name='5MA',
+                        line=dict(color='#ffa198', width=0.9), showlegend=True,
+                        hovertemplate='<b>5MA</b>: %{y:.3f}%<extra></extra>'
+                    ))
+                if ma20_col in irs.columns:
+                    fig_irs.add_trace(go.Scatter(
+                        x=irs['일자'], y=irs[ma20_col], name='20MA',
+                        line=dict(color='#d2a8ff', width=0.9), showlegend=True,
+                        hovertemplate='<b>20MA</b>: %{y:.3f}%<extra></extra>'
+                    ))
+                fig_irs.update_layout(
+                    title=dict(text=f'IRS {t}', font=dict(color='#e6edf3', size=13, family='Noto Sans KR'), x=0),
+                    paper_bgcolor='#161b22', plot_bgcolor='#161b22',
+                    font=dict(color='#D9DADD', family='Noto Sans KR', size=11),
+                    height=310, margin=dict(l=10, r=10, t=36, b=10),
+                    hovermode='x unified',
+                    legend=dict(orientation='h', yanchor='bottom', y=1.0, xanchor='left', x=0,
+                                font=dict(size=10, color='#D9DADD'), bgcolor='rgba(0,0,0,0)'),
+                    xaxis=dict(gridcolor=GRID_COLOR, showgrid=True, zeroline=False,
+                               minor=dict(showgrid=True, gridcolor=MINOR_COLOR),
+                               tickfont=dict(color='#D9DADD', size=10)),
+                    yaxis=dict(gridcolor=GRID_COLOR, showgrid=True, zeroline=False,
+                               minor=dict(showgrid=True, gridcolor=MINOR_COLOR),
+                               tickfont=dict(color='#D9DADD', size=10)),
+                )
+                st.plotly_chart(fig_irs, use_container_width=True)
 
 # ══════════════════════════════════════════════════════════════
 # 4. 선물 투자자 동향
@@ -497,24 +660,21 @@ if not swap_ts.empty:
     prev_sw   = swap_ts.iloc[-2] if len(swap_ts) > 1 else latest_sw
     sub_sw    = swap_ts
 
-    # 그룹 정의: (섹션명, [(표시명, 컬럼 prefix)])
     GROUPS = [
-        ('공사채',  [('AAA','공사채(AAA)'), ('AA+','공사채(AA+)'), ('AA','공사채(AA0)'), ('AA-','공사채(AA-)')]),
-        ('은행채',  [('AAA','은행채(AAA)'), ('AA+','은행채(AA+)'), ('AA','은행채(AA0)'), ('AA-','은행채(AA-)')]),
-        ('카드채',  [('AA+','카드채(AA+)'), ('AA','카드채(AA0)'), ('AA-','카드채(AA-)')]),
-        ('회사채',  [('AAA','회사채(AAA)'), ('AA+','회사채(AA+)'), ('AA','회사채(AA)'),  ('AA-','회사채(AA-)')]),
+        ('공사채',       [('AAA','공사채(AAA)'), ('AA+','공사채(AA+)'), ('AA','공사채(AA0)'), ('AA-','공사채(AA-)')]),
+        ('은행채',       [('AAA','은행채(AAA)'), ('AA+','은행채(AA+)'), ('AA','은행채(AA0)'), ('AA-','은행채(AA-)')]),
+        ('카드채',       [('AA+','카드채(AA+)'), ('AA','카드채(AA0)'), ('AA-','카드채(AA-)')]),
+        ('회사채',       [('AAA','회사채(AAA)'), ('AA+','회사채(AA+)'), ('AA','회사채(AA)'),  ('AA-','회사채(AA-)')]),
         ('산금채/중금채', [('산금채','산금채'), ('중금채','중금채')]),
     ]
-    TENORS_DISP = ['1Y','1.5Y','2Y','3Y']
-    TENOR_KEYS  = ['1Y','1.5Y','2Y','3Y']
-    COLORS_TENOR = ['#58a6ff','#3fb950','#f0883e','#d2a8ff']
-    COLORS_GRADE = ['#58a6ff','#3fb950','#f0883e','#d2a8ff']
+    TENORS_DISP  = ['1Y','1.5Y','2Y','3Y']
+    TENOR_KEYS   = ['1Y','1.5Y','2Y','3Y']
+    COLORS_GRADE = ['#58a6ff','#3fb950','#f0883e','#d2a8ff','#ffa198']
 
     for grp_name, items in GROUPS:
         grp_subheader = f'<div style="color:#8b949e;font-size:14px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;margin:18px 0 8px 0;padding-left:6px;border-left:2px solid #3d444d;">{grp_name}</div>'
         st.markdown(grp_subheader, unsafe_allow_html=True)
 
-        # 당일값 카드 (만기별 탭 × 등급별 카드)
         tenor_tab = st.tabs(TENORS_DISP)
         for ti, (tenor_disp, tenor_key) in enumerate(zip(TENORS_DISP, TENOR_KEYS)):
             with tenor_tab[ti]:
@@ -534,8 +694,6 @@ if not swap_ts.empty:
                             {delta_html(chg_disp)}
                         </div>""", unsafe_allow_html=True)
 
-        # 추이 차트: 만기별로 1개씩 → 각 차트 안에 등급(AAA/AA+/AA/AA-)을 선으로 표시
-        COLORS_GRADE = ['#58a6ff','#3fb950','#f0883e','#d2a8ff','#ffa198']
         chart_cols = st.columns(len(TENORS_DISP))
         for ti2, (tenor_disp, tenor_key) in enumerate(zip(TENORS_DISP, TENOR_KEYS)):
             with chart_cols[ti2]:
@@ -557,7 +715,6 @@ if not swap_ts.empty:
 # ══════════════════════════════════════════════════════════════
 # 6. Bond-Swap Spread 당일 스냅샷 테이블
 # ══════════════════════════════════════════════════════════════
-
 if bond_swap_static:
     header = '<tr><th>종목</th>' + ''.join(f'<th>{t}</th>' for t in static_tenors) + '</tr>'
     rows_html = ''
