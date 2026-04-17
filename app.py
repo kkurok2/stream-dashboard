@@ -1091,9 +1091,9 @@ elif page == "💳 크레딧":
             st.plotly_chart(fig_cr, use_container_width=True)
 
     # ────────────────────────────────────────────────────────
-    # 5. Bond-Swap Spread 시계열
+    # 5. Bond-Swap Spread
     # ────────────────────────────────────────────────────────
-    st.markdown('<div class="section-header">🔗 Bond-Swap Spread 시계열</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">🔗 Bond-Swap Spread</div>', unsafe_allow_html=True)
 
     if swap_ts.empty:
         st.warning("⚠️ Swap Time Series 데이터를 불러오지 못했습니다.")
@@ -1101,34 +1101,42 @@ elif page == "💳 크레딧":
     if not swap_ts.empty:
         latest_sw = swap_ts.iloc[-1]
         prev_sw   = swap_ts.iloc[-2] if len(swap_ts) > 1 else latest_sw
-        sub_sw    = swap_ts
 
         GROUPS = [
-            ('공사채',       [('AAA','공사채(AAA)'), ('AA+','공사채(AA+)'), ('AA','공사채(AA0)'), ('AA-','공사채(AA-)')]),
-            ('은행채',       [('AAA','은행채(AAA)'), ('AA+','은행채(AA+)'), ('AA','은행채(AA0)'), ('AA-','은행채(AA-)')]),
-            ('카드채',       [('AA+','카드채(AA+)'), ('AA','카드채(AA0)'), ('AA-','카드채(AA-)')]),
-            ('회사채',       [('AAA','회사채(AAA)'), ('AA+','회사채(AA+)'), ('AA','회사채(AA)'),  ('AA-','회사채(AA-)')]),
-            ('산금채/중금채', [('산금채','산금채'), ('중금채','중금채')]),
+            ('공사채',        [('AAA','공사채(AAA)'), ('AA+','공사채(AA+)'), ('AA','공사채(AA0)'), ('AA-','공사채(AA-)')]),
+            ('은행채',        [('AAA','은행채(AAA)'), ('AA+','은행채(AA+)'), ('AA','은행채(AA0)'), ('AA-','은행채(AA-)')]),
+            ('카드채',        [('AA+','카드채(AA+)'), ('AA','카드채(AA0)'), ('AA-','카드채(AA-)')]),
+            ('회사채',        [('AAA','회사채(AAA)'), ('AA+','회사채(AA+)'), ('AA','회사채(AA)'),  ('AA-','회사채(AA-)')]),
+            ('산금채/중금채',  [('산금채','산금채'), ('중금채','중금채')]),
         ]
-        TENORS_DISP  = ['1Y','1.5Y','2Y','3Y']
-        TENOR_KEYS   = ['1Y','1.5Y','2Y','3Y']
-        COLORS_GRADE = ['#58a6ff','#3fb950','#f0883e','#d2a8ff','#ffa198']
+        TENORS_DISP  = ['1Y', '1.5Y', '2Y', '3Y']
+        TENOR_KEYS   = ['1Y', '1.5Y', '2Y', '3Y']
+        COLORS_GRADE = ['#58a6ff', '#3fb950', '#f0883e', '#d2a8ff', '#ffa198']
 
         for grp_name, items in GROUPS:
-            grp_subheader = f'<div style="color:#ededed;font-size:16px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;margin:22px 0 10px 0;padding-left:8px;border-left:3px solid #3d444d;">{grp_name}</div>'
-            st.markdown(grp_subheader, unsafe_allow_html=True)
+            # 그룹 소제목
+            st.markdown(
+                f'<div style="color:#ededed;font-size:16px;font-weight:700;'
+                f'letter-spacing:0.06em;text-transform:uppercase;'
+                f'margin:28px 0 12px 0;padding-left:8px;'
+                f'border-left:3px solid #3d444d;">{grp_name}</div>',
+                unsafe_allow_html=True
+            )
 
-            tenor_tab = st.tabs(TENORS_DISP)
-            for ti, (tenor_disp, tenor_key) in enumerate(zip(TENORS_DISP, TENOR_KEYS)):
-                with tenor_tab[ti]:
-                    metric_c = st.columns(len(items))
-                    for ci, (grade_name, prefix) in enumerate(items):
-                        col_key = f'{prefix}_{tenor_key}'
-                        if col_key not in swap_ts.columns:
-                            continue
-                        val = latest_sw[col_key]
-                        chg = latest_sw[col_key] - prev_sw[col_key]
-                        with metric_c[ci]:
+            left_col, right_col = st.columns([1, 3])
+
+            # ── 좌측: 당일 값 카드 ──────────────────────────────
+            with left_col:
+                # 연물 선택 탭
+                tenor_tab = st.tabs(TENORS_DISP)
+                for ti, (tenor_disp, tenor_key) in enumerate(zip(TENORS_DISP, TENOR_KEYS)):
+                    with tenor_tab[ti]:
+                        for ci, (grade_name, prefix) in enumerate(items):
+                            col_key = f'{prefix}_{tenor_key}'
+                            if col_key not in swap_ts.columns:
+                                continue
+                            val      = latest_sw[col_key]
+                            chg      = latest_sw[col_key] - prev_sw[col_key]
                             chg_disp = chg * 100 if abs(chg) < 1 else chg
                             st.markdown(f"""
                             <div class="metric-card">
@@ -1137,45 +1145,33 @@ elif page == "💳 크레딧":
                                 {delta_html(chg_disp)}
                             </div>""", unsafe_allow_html=True)
 
-            chart_cols = st.columns(len(TENORS_DISP))
-            for ti2, (tenor_disp, tenor_key) in enumerate(zip(TENORS_DISP, TENOR_KEYS)):
-                with chart_cols[ti2]:
-                    fig_s = go.Figure()
-                    for ci, (grade_name, prefix) in enumerate(items):
-                        col_key = f'{prefix}_{tenor_key}'
-                        if col_key not in sub_sw.columns:
-                            continue
-                        y_bp = sub_sw[col_key] * 100
-                        fig_s.add_trace(go.Scatter(
-                            x=sub_sw['일자'], y=y_bp,
-                            name=grade_name,
-                            line=dict(color=COLORS_GRADE[ci % len(COLORS_GRADE)], width=1.5),
-                            hovertemplate=f'<b>{grade_name}</b>: %{{y:.2f}}bp<br>%{{x|%Y-%m-%d}}<extra></extra>'
-                        ))
-                    fig_s.update_layout(**base_layout(f'{grp_name} {tenor_disp} (bp)', height=380))
-                    st.plotly_chart(fig_s, use_container_width=True)
-
-    # ────────────────────────────────────────────────────────
-    # 6. Bond-Swap Spread 당일 스냅샷 테이블
-    # ────────────────────────────────────────────────────────
-    if bond_swap_static:
-        st.markdown('<div class="section-header">📋 Bond-Swap Spread 당일 스냅샷</div>', unsafe_allow_html=True)
-        header = '<tr><th>종목</th>' + ''.join(f'<th>{t}</th>' for t in static_tenors) + '</tr>'
-        rows_html = ''
-        for rec in bond_swap_static:
-            cells = f'<td>{rec["종목"]}</td>'
-            for j, v in enumerate(rec['vals']):
-                chg = rec['chgs'][j] if rec['chgs'] else None
-                v_str = f'{v:.2f}' if pd.notna(v) else '-'
-                chg_str = ''
-                if chg is not None and pd.notna(chg):
-                    cls  = 'td-pos' if chg > 0 else 'td-neg' if chg < 0 else ''
-                    sign = '▲' if chg > 0 else '▼' if chg < 0 else '─'
-                    chg_str = f'<br><span class="{cls}" style="font-size:15px">{sign}{abs(chg):.2f}</span>'
-                cells += f'<td>{v_str}{chg_str}</td>'
-            rows_html += f'<tr>{cells}</tr>'
-        st.markdown(f'<table class="bond-table"><thead>{header}</thead><tbody>{rows_html}</tbody></table>',
-                    unsafe_allow_html=True)
+            # ── 우측: 연물 선택 → 시계열 차트 1개 ──────────────
+            with right_col:
+                sel_tenor_key = st.radio(
+                    '연물 선택',
+                    options=TENORS_DISP,
+                    index=0,
+                    horizontal=True,
+                    key=f'bs_tenor_{grp_name}',
+                    label_visibility='collapsed',
+                )
+                fig_s = go.Figure()
+                for ci, (grade_name, prefix) in enumerate(items):
+                    col_key = f'{prefix}_{sel_tenor_key}'
+                    if col_key not in swap_ts.columns:
+                        continue
+                    y_bp = swap_ts[col_key] * 100
+                    fig_s.add_trace(go.Scatter(
+                        x=swap_ts['일자'], y=y_bp,
+                        name=grade_name,
+                        line=dict(color=COLORS_GRADE[ci % len(COLORS_GRADE)], width=1.8),
+                        hovertemplate=f'<b>{grade_name}</b>: %{{y:.2f}}bp<br>%{{x|%Y-%m-%d}}<extra></extra>'
+                    ))
+                fig_s.update_layout(
+                    **base_layout(f'{grp_name} {sel_tenor_key} (bp)', height=400)
+                )
+                fig_s.update_layout(margin=dict(l=10, r=10, t=80, b=20))
+                st.plotly_chart(fig_s, use_container_width=True)
 
 st.markdown("---")
 st.markdown('<div class="refresh-info">🔄 우측 상단 버튼을 눌러 최신 데이터로 갱신하세요</div>',
