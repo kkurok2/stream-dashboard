@@ -457,57 +457,30 @@ def parse_spread(df):
 
 def parse_spread_mtdytd(df):
     """
-    SPREAD 시트 MTD/YTD 파싱.
-    - 'MTD' / 'YTD' 문자열이 포함된 행을 동적으로 탐색
-    - 해당 행에서 숫자값 5개(2/3~20/30)를 추출 (bp 단위)
-    - 탐색 실패 시 고정 인덱스(row5=MTD, row6=YTD, col21~25)로 폴백
+    SPREAD 시트 MTD/YTD: 셀 범위 V3:Z7 (시트 기준)
+    df index 기준: 행 2~6, 열 21~25 (V~Z)
+    - 해당 범위에서 MTD/YTD 레이블을 탐색하고 값을 읽음
     """
     sp_cols = ['2/3', '3/10', '5/30', '10/30', '20/30']
     result = {}
     try:
-        # ── 방법 1: MTD/YTD 레이블 행 동적 탐색 ──────────────────
-        mtd_row_i, ytd_row_i = None, None
-        for i in range(min(20, len(df))):
-            row = df.iloc[i, :]
+        for row_i in range(2, 7):  # 시트 행 3~7 → df index 2~6
+            if row_i >= len(df):
+                break
+            row = df.iloc[row_i, :]
+            # 레이블 탐색 (행 전체에서)
+            label = None
             for cell in row:
                 cell_str = str(cell).strip().upper()
-                if cell_str == 'MTD' and mtd_row_i is None:
-                    mtd_row_i = i
-                elif cell_str == 'YTD' and ytd_row_i is None:
-                    ytd_row_i = i
-
-        for label, row_i in [('MTD', mtd_row_i), ('YTD', ytd_row_i)]:
-            if row_i is None:
-                continue
-            row = df.iloc[row_i, :]
-            num_vals = []
-            for cell in row:
-                cell_str = str(cell).strip()
-                if cell_str.upper() in ('MTD', 'YTD', '', 'NAN', 'NONE'):
-                    continue
-                v = pd.to_numeric(cell_str, errors='coerce')
-                if pd.notna(v):
-                    num_vals.append(v)
-                if len(num_vals) == 5:
+                if cell_str in ('MTD', 'YTD'):
+                    label = cell_str
                     break
-            if len(num_vals) == 5:
-                # 소수 단위(%p)로 저장된 경우 bp로 변환
-                num_vals = [v * 100 if abs(v) < 1 else v for v in num_vals]
-                result[label] = dict(zip(sp_cols, num_vals))
-
-        if result:
-            return result
-
-        # ── 방법 2: 고정 인덱스 폴백 (row5=MTD, row6=YTD, col21~25) ──
-        for label, row_i in [('MTD', 5), ('YTD', 6)]:
-            row = df.iloc[row_i, :]
-            vals = [pd.to_numeric(row.iloc[j], errors='coerce') for j in range(21, 26)]
-            if all(pd.isna(v) for v in vals):
-                # col 11~15 시도 (스프레드 데이터 위치 대안)
-                vals = [pd.to_numeric(row.iloc[j], errors='coerce') for j in range(11, 16)]
+            if label is None:
+                continue
+            # 값: 열 21~25 (V~Z)
+            vals = [pd.to_numeric(df.iloc[row_i, j], errors='coerce') for j in range(21, 26)]
             result[label] = dict(zip(sp_cols, vals))
         return result
-
     except Exception:
         return {}
 
@@ -542,58 +515,33 @@ def parse_irs(df):
 
 def parse_irs_mtdytd(df):
     """
-    IRS 시트 MTD/YTD 파싱.
-    - 'MTD' / 'YTD' 문자열이 포함된 행을 동적으로 탐색
-    - 해당 행에서 숫자값 4개(1Y~3Y)를 추출
-    - 탐색 실패 시 고정 인덱스(row3=MTD, row4=YTD, col5~8)로 폴백
+    IRS 시트 MTD/YTD: 셀 범위 V3:AA6 (시트 기준)
+    df index 기준: 행 2~5, 열 21~26 (V~AA)
+    - 해당 범위에서 MTD/YTD 레이블을 탐색하고 값을 읽음
     """
     irs_cols = ['1Y', '1.5Y', '2Y', '3Y']
     result = {}
     try:
-        # ── 방법 1: MTD/YTD 레이블 행 동적 탐색 ──────────────────
-        mtd_row_i, ytd_row_i = None, None
-        for i in range(min(20, len(df))):
-            row = df.iloc[i, :]
+        for row_i in range(2, 6):  # 시트 행 3~6 → df index 2~5
+            if row_i >= len(df):
+                break
+            row = df.iloc[row_i, :]
+            # 레이블 탐색 (행 전체에서)
+            label = None
             for cell in row:
                 cell_str = str(cell).strip().upper()
-                if cell_str == 'MTD' and mtd_row_i is None:
-                    mtd_row_i = i
-                elif cell_str == 'YTD' and ytd_row_i is None:
-                    ytd_row_i = i
-
-        for label, row_i in [('MTD', mtd_row_i), ('YTD', ytd_row_i)]:
-            if row_i is None:
-                continue
-            row = df.iloc[row_i, :]
-            # 해당 행에서 숫자값만 추출 (레이블 셀 제외)
-            num_vals = []
-            for cell in row:
-                cell_str = str(cell).strip()
-                if cell_str.upper() in ('MTD', 'YTD', '', 'NAN', 'NONE'):
-                    continue
-                v = pd.to_numeric(cell_str, errors='coerce')
-                if pd.notna(v):
-                    num_vals.append(v)
-                if len(num_vals) == 4:
+                if cell_str in ('MTD', 'YTD'):
+                    label = cell_str
                     break
-            if len(num_vals) == 4:
-                result[label] = dict(zip(irs_cols, num_vals))
-
-        if result:
-            return result
-
-        # ── 방법 2: 고정 인덱스 폴백 (row3=MTD, row4=YTD) ────────
-        # IRS 시트에서 MTD/YTD 데이터가 있는 컬럼 범위를 5~8로 시도
-        for label, row_i in [('MTD', 3), ('YTD', 4)]:
-            row = df.iloc[row_i, :]
-            # 먼저 col 5~8 시도
-            vals = [pd.to_numeric(row.iloc[j], errors='coerce') for j in range(5, 9)]
-            if all(pd.isna(v) for v in vals):
-                # col 22~25 시도 (기존 로직)
-                vals = [pd.to_numeric(row.iloc[j], errors='coerce') for j in range(22, 26)]
-            result[label] = dict(zip(irs_cols, vals))
+            if label is None:
+                continue
+            # 값: 열 21~26 (V~AA), 4개 컬럼(1Y~3Y)
+            vals = [pd.to_numeric(df.iloc[row_i, j], errors='coerce') for j in range(21, 27)]
+            # NaN 제거 후 앞에서 4개 사용
+            vals = [v for v in vals if pd.notna(v)][:4]
+            if len(vals) == 4:
+                result[label] = dict(zip(irs_cols, vals))
         return result
-
     except Exception:
         return {}
 
@@ -1003,19 +951,8 @@ if page == "🏛️ 국고채":
                 </div>""", unsafe_allow_html=True)
 
             if irs_mtdytd:
-                # IRS MTD/YTD 값: 시트가 소수(%p)로 저장된 경우 bp로 변환
-                irs_mtdytd_bp = {}
-                for label, d in irs_mtdytd.items():
-                    irs_mtdytd_bp[label] = {}
-                    for k, v in d.items():
-                        try:
-                            fv = float(v)
-                            # 절댓값이 1 미만이면 소수형(%p) → bp 변환
-                            irs_mtdytd_bp[label][k] = fv * 100 if abs(fv) < 1 else fv
-                        except Exception:
-                            irs_mtdytd_bp[label][k] = float('nan')
                 st.markdown('<div style="margin-top:16px;color:#ededed;font-size:13px;font-weight:600;letter-spacing:0.06em;">MTD / YTD (bp)</div>', unsafe_allow_html=True)
-                st.markdown(mtd_ytd_table_html(irs_mtdytd_bp, irs_tenors, unit='bp'),
+                st.markdown(mtd_ytd_table_html(irs_mtdytd, irs_tenors, unit='bp'),
                             unsafe_allow_html=True)
 
         with chart_col2:
