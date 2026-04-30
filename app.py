@@ -477,10 +477,9 @@ def parse_spread_mtdytd(df):
                     break
             if label is None:
                 continue
-            # 열 21~25 (V~Z): 2/3, 3/10, 5/30, 10/30, 20/30
+            # 열 21~25 (V~Z): 2/3, 3/10, 5/30, 10/30, 20/30 — 시트 값 그대로 bp
             vals = [pd.to_numeric(df.iloc[row_i, j], errors='coerce') for j in range(21, 26)]
-            vals_bp = [v * 10000 if pd.notna(v) else float('nan') for v in vals]
-            result[label] = dict(zip(sp_cols, vals_bp))
+            result[label] = dict(zip(sp_cols, vals))
         return result
     except Exception:
         return {}
@@ -536,10 +535,9 @@ def parse_irs_mtdytd(df):
                     break
             if label is None:
                 continue
-            # 열 21~24 (V~Y): 1Y, 1.5Y, 2Y, 3Y
+            # 열 21~24 (V~Y): 1Y, 1.5Y, 2Y, 3Y — 시트 값 그대로 bp
             vals = [pd.to_numeric(df.iloc[row_i, j], errors='coerce') for j in range(21, 25)]
-            vals_bp = [v * 10000 if pd.notna(v) else float('nan') for v in vals]
-            result[label] = dict(zip(irs_cols, vals_bp))
+            result[label] = dict(zip(irs_cols, vals))
         return result
     except Exception:
         return {}
