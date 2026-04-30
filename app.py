@@ -515,10 +515,10 @@ def parse_irs(df):
 
 def parse_irs_mtdytd(df):
     """
-    IRS 시트 MTD/YTD: 셀 범위 V3:AA5 (시트 기준)
-    df index 기준: 행 2~4, 열 21~24 (V~Y) → 1Y, 1.5Y, 2Y, 3Y
-    구글 시트는 소수(%p) 형태로 저장되므로 ×10000 하여 bp로 변환
-    예: -0.0002 × 10000 = -2bp
+    IRS 시트 MTD/YTD: 셀 범위 V3:Z5 (시트 기준)
+    - V열(index 21): MTD/YTD 레이블
+    - W~Z열(index 22~25): 1Y, 1.5Y, 2Y, 3Y 값 (bp 단위 그대로)
+    - 시트 행 3~5 → df index 2~4
     """
     irs_cols = ['1Y', '1.5Y', '2Y', '3Y']
     result = {}
@@ -526,18 +526,13 @@ def parse_irs_mtdytd(df):
         for row_i in range(2, 5):  # 시트 행 3~5 → df index 2~4
             if row_i >= len(df):
                 break
-            row = df.iloc[row_i, :]
-            label = None
-            for cell in row:
-                cell_str = str(cell).strip().upper()
-                if cell_str in ('MTD', 'YTD'):
-                    label = cell_str
-                    break
-            if label is None:
+            # V열(21)에서 레이블 직접 읽기
+            label_cell = str(df.iloc[row_i, 21]).strip().upper()
+            if label_cell not in ('MTD', 'YTD'):
                 continue
-            # 열 21~24 (V~Y): 1Y, 1.5Y, 2Y, 3Y — 시트 값 그대로 bp
-            vals = [pd.to_numeric(df.iloc[row_i, j], errors='coerce') for j in range(21, 25)]
-            result[label] = dict(zip(irs_cols, vals))
+            # W~Z열(22~25)에서 값 읽기
+            vals = [pd.to_numeric(df.iloc[row_i, j], errors='coerce') for j in range(22, 26)]
+            result[label_cell] = dict(zip(irs_cols, vals))
         return result
     except Exception:
         return {}
