@@ -458,8 +458,9 @@ def parse_spread(df):
 def parse_spread_mtdytd(df):
     """
     SPREAD 시트 MTD/YTD: 셀 범위 V3:Z7 (시트 기준)
-    df index 기준: 행 2~6, 열 21~25 (V~Z)
-    - 해당 범위에서 MTD/YTD 레이블을 탐색하고 값을 읽음
+    df index 기준: 행 2~6, 열 21~25 (V~Z) → 2/3, 3/10, 5/30, 10/30, 20/30
+    구글 시트는 소수(%p) 형태로 저장되므로 ×10000 하여 bp로 변환
+    예: -0.0002 × 10000 = -2bp
     """
     sp_cols = ['2/3', '3/10', '5/30', '10/30', '20/30']
     result = {}
@@ -468,7 +469,6 @@ def parse_spread_mtdytd(df):
             if row_i >= len(df):
                 break
             row = df.iloc[row_i, :]
-            # 레이블 탐색 (행 전체에서)
             label = None
             for cell in row:
                 cell_str = str(cell).strip().upper()
@@ -477,9 +477,10 @@ def parse_spread_mtdytd(df):
                     break
             if label is None:
                 continue
-            # 값: 열 21~25 (V~Z)
+            # 열 21~25 (V~Z): 2/3, 3/10, 5/30, 10/30, 20/30
             vals = [pd.to_numeric(df.iloc[row_i, j], errors='coerce') for j in range(21, 26)]
-            result[label] = dict(zip(sp_cols, vals))
+            vals_bp = [v * 10000 if pd.notna(v) else float('nan') for v in vals]
+            result[label] = dict(zip(sp_cols, vals_bp))
         return result
     except Exception:
         return {}
@@ -515,18 +516,18 @@ def parse_irs(df):
 
 def parse_irs_mtdytd(df):
     """
-    IRS 시트 MTD/YTD: 셀 범위 V3:AA6 (시트 기준)
-    df index 기준: 행 2~5, 열 21~26 (V~AA)
-    - 해당 범위에서 MTD/YTD 레이블을 탐색하고 값을 읽음
+    IRS 시트 MTD/YTD: 셀 범위 V3:AA5 (시트 기준)
+    df index 기준: 행 2~4, 열 21~24 (V~Y) → 1Y, 1.5Y, 2Y, 3Y
+    구글 시트는 소수(%p) 형태로 저장되므로 ×10000 하여 bp로 변환
+    예: -0.0002 × 10000 = -2bp
     """
     irs_cols = ['1Y', '1.5Y', '2Y', '3Y']
     result = {}
     try:
-        for row_i in range(2, 6):  # 시트 행 3~6 → df index 2~5
+        for row_i in range(2, 5):  # 시트 행 3~5 → df index 2~4
             if row_i >= len(df):
                 break
             row = df.iloc[row_i, :]
-            # 레이블 탐색 (행 전체에서)
             label = None
             for cell in row:
                 cell_str = str(cell).strip().upper()
@@ -535,12 +536,10 @@ def parse_irs_mtdytd(df):
                     break
             if label is None:
                 continue
-            # 값: 열 21~26 (V~AA), 4개 컬럼(1Y~3Y)
-            vals = [pd.to_numeric(df.iloc[row_i, j], errors='coerce') for j in range(21, 27)]
-            # NaN 제거 후 앞에서 4개 사용
-            vals = [v for v in vals if pd.notna(v)][:4]
-            if len(vals) == 4:
-                result[label] = dict(zip(irs_cols, vals))
+            # 열 21~24 (V~Y): 1Y, 1.5Y, 2Y, 3Y
+            vals = [pd.to_numeric(df.iloc[row_i, j], errors='coerce') for j in range(21, 25)]
+            vals_bp = [v * 10000 if pd.notna(v) else float('nan') for v in vals]
+            result[label] = dict(zip(irs_cols, vals_bp))
         return result
     except Exception:
         return {}
