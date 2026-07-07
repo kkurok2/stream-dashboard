@@ -152,21 +152,35 @@ st.markdown("""
     /* 라디오 항목 텍스트 노드 */
     section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label *,
     section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label p,
-    section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label span {
+    section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label span,
+    section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label div[data-testid="stMarkdownContainer"] {
         color: #ededed !important;
         opacity: 1 !important;
     }
-    /* 동그라미 숨기기 */
-    section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label > div:first-of-type {
+    /* 텍스트 컨테이너는 반드시 표시 */
+    section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label > div:last-child {
+        display: block !important;
+        visibility: visible !important;
+        width: auto !important;
+        height: auto !important;
+    }
+    /* 동그라미(원형 라디오 마커)만 숨기기 — 텍스트는 유지 */
+    section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] input[type="radio"] {
+        position: absolute !important;
+        opacity: 0 !important;
+        width: 0 !important;
+        height: 0 !important;
+        margin: 0 !important;
+        pointer-events: none !important;
+    }
+    section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label > div[data-baseweb="radio"] > div:first-child,
+    section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label [role="radio"],
+    section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label svg {
         display: none !important;
         width: 0 !important;
         height: 0 !important;
         margin: 0 !important;
         padding: 0 !important;
-        overflow: hidden !important;
-    }
-    section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label > div:first-of-type * {
-        display: none !important;
     }
     /* 호버 */
     section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label:hover {
@@ -717,6 +731,33 @@ st.markdown("""
                     node.style.setProperty('color', '#ededed', 'important');
                     node.style.setProperty('opacity', '1', 'important');
                 });
+            });
+        });
+
+        // 사이드바 라디오: 텍스트는 살리고 동그라미(마커)만 숨김
+        var radioLabels = doc.querySelectorAll(
+            'section[data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label'
+        );
+        radioLabels.forEach(function(label) {
+            // 라벨 자체 표시 강제
+            label.style.setProperty('display', 'flex', 'important');
+            label.style.setProperty('opacity', '1', 'important');
+            label.style.setProperty('visibility', 'visible', 'important');
+            // 내부 요소 순회
+            label.querySelectorAll('*').forEach(function(node) {
+                var isMarker =
+                    node.tagName === 'INPUT' ||
+                    node.tagName === 'SVG' ||
+                    node.getAttribute('role') === 'radio' ||
+                    node.getAttribute('data-baseweb') === 'radio';
+                if (isMarker) {
+                    node.style.setProperty('display', 'none', 'important');
+                } else {
+                    // 텍스트 노드류는 확실히 표시 + 밝은 색
+                    node.style.setProperty('opacity', '1', 'important');
+                    node.style.setProperty('visibility', 'visible', 'important');
+                    node.style.setProperty('color', '#ededed', 'important');
+                }
             });
         });
     }
